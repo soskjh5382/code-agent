@@ -1,0 +1,191 @@
+/* ============================================================
+   App.css — 채팅 화면 스타일 (포트폴리오와 동일한 다크 톤)
+   ============================================================
+   색 값은 포트폴리오와 맞췄다. 바꾸고 싶으면 아래 :root 변수만 수정.
+   ============================================================ */
+
+:root {
+  --bg: #0b0d12;
+  --card: #141821;
+  --card-hover: #181d28;
+  --line: #232936;
+  --text: #eef1f6;
+  --dim: #98a1b2;
+  --faint: #5a6474;
+  --accent: #6ee7c7;
+  --sans: "Inter", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* 전체 배경. 텍스트 기본색을 여기서 확실히 지정(제목이 묻히는 문제 방지) */
+.app {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+}
+
+/* 가운데 정렬 컨테이너 (너비를 조금 넓히고 여백 확보) */
+.container {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 32px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 헤더 */
+.hero {
+  padding: 56px 0 28px;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 20px;        /* 14px → 20px 로 키움 */
+  color: var(--accent);
+  margin: 0;
+  letter-spacing: 0.05em; /* 글자 간격 살짝 (선택) */
+}
+
+/* 큰 제목 — 색을 명시적으로 지정(안 보이던 문제 해결) + 크기 키움 */
+.title {
+  font-size: clamp(38px, 6vw, 56px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 18px 0 0;
+  color: var(--text);   /* ← 이게 핵심. 흰색으로 확실히 */
+}
+
+.subtitle {
+  font-size: 17px;
+  color: var(--dim);
+  margin-top: 18px;
+  line-height: 1.75;
+  max-width: 560px;
+}
+
+/* 말풍선이 쌓이는 스크롤 영역 */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.empty-hint {
+  color: var(--faint);
+  font-size: 15px;
+  margin-top: 8px;
+}
+
+/* 말풍선 공통 (글자 키움) */
+.bubble {
+  max-width: 82%;
+  padding: 14px 18px;
+  border-radius: 14px;
+  line-height: 1.7;
+  font-size: 16px;
+  white-space: pre-wrap; /* 줄바꿈 살리기 */
+  word-break: break-word;
+}
+
+/* 내 질문: 오른쪽, 민트색 */
+.bubble.user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #0b0d12;
+  font-weight: 500;
+}
+
+/* 에이전트 답변: 왼쪽, 카드색 */
+.bubble.agent {
+  align-self: flex-start;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.bubble.loading {
+  color: var(--faint);
+  font-family: var(--mono);
+}
+
+/* 예시 질문 칩 (글자 키움) */
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.example-chip {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+/* hover: 민트 테두리 + 민트 글자 */
+.example-chip:hover {
+  border-color: rgba(110, 231, 199, 0.47);
+  color: var(--accent);
+}
+
+/* 입력 영역 */
+.input-area {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 28px;
+}
+
+.input-area textarea {
+  flex: 1;
+  resize: none;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-area textarea::placeholder {
+  color: var(--faint);
+}
+
+.input-area textarea:focus {
+  border-color: rgba(110, 231, 199, 0.47);
+}
+
+.input-area button {
+  padding: 0 26px;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #0b0d12;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.input-area button:disabled {
+  background: var(--faint);
+  cursor: not-allowed;
+}
