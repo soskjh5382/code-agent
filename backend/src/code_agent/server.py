@@ -16,10 +16,7 @@ app = FastAPI()
 # 프론트(다른 주소)에서 이 서버로 요청하는 걸 허용한다.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=["*"],   # 모든 주소 허용 (배포 후 Vercel 주소로 좁힐 수 있음)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
