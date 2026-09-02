@@ -9,8 +9,10 @@
 import { useState } from "react";
 import "./App.css";
 
-// 백엔드 서버 주소. 지금은 로컬. (배포하면 이 주소를 바꾼다)
-const API_URL = "http://127.0.0.1:8000/chat";
+// 백엔드 주소. 배포 환경에선 Vercel에 설정한 환경변수(VITE_API_URL)를 쓰고,
+// 로컬 개발 중엔 환경변수가 없으므로 기본값(로컬 서버)을 쓴다.
+const API_URL =
+    (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000") + "/chat";
 
 // 예시 질문 — 이 에이전트는 프로젝트 폴더 안 파일만 읽으므로
 // 프로젝트 자체에 대한 질문이라야 잘 답한다.
