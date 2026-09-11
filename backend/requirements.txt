@@ -4,3 +4,4 @@ python-dotenv
 google-genai
 anthropic
 openai
+mcp>=2.2.0
