@@ -25,7 +25,7 @@ client = genai.Client(api_key=api_key)
 #    model: 무료 티어에서 넉넉한 Flash 계열을 사용 (개발용으로 적합).
 #    contents: 모델에게 보낼 메시지(프롬프트).
 response = client.models.generate_content(
-    model="gemini-3.6-flash",
+    model="gemini-3.5-flash-lite",
     contents="한 문장으로 자기소개 해줘.",
 )
 

@@ -11,7 +11,13 @@
 # ============================================================
 
 import logging
+import asyncio                      # MCP 로직이 async라서, 동기 함수 안에서 돌리려고 필요
 from pathlib import Path   # 파일/폴더 경로를 안전하게 다루는 표준 도구
+
+from mcp import ClientSession, StdioServerParameters   # MCP 클라이언트 (mcp_probe.py와 동일)
+from mcp.client.stdio import stdio_client
+from . import config               # .env에서 읽은 MCP 경로를 쓰려고
+
 
 # --- 로그 설정 ---
 # 도구가 호출될 때마다 터미널에 "🔧 어떤 도구가 불렸는지"를 찍는다.
@@ -138,3 +144,82 @@ def search_code(keyword: str) -> str:
         results = results[:30] + ["...(더 있음)"]
 
     return "\n".join(results)
+
+
+# ============================================================
+# MCP 도구: find_callers  (code-structure-mcp 서버에 물어봄)
+# ============================================================
+# 이 함수는 겉보기엔 read_file/search_code 같은 평범한 도구 함수지만,
+# 속에서는 code-structure-mcp 서버를 켜서 정확한 구조 분석 결과를 받아온다.
+# MCP 왕복은 async라서, 그 부분만 아래 _async 함수에 넣고
+# find_callers는 asyncio.run으로 감싸 "평범한 동기 함수" 겉모습을 유지한다.
+
+
+async def _call_mcp_tool(tool_name: str, arguments: dict) -> str:
+    """code-structure-mcp 서버를 켜서 도구 하나를 호출하고 결과 문자열을 돌려준다.
+    (mcp_probe.py에서 검증한 연결 로직을 그대로 함수로 옮긴 것)"""
+
+    # 서버를 어떻게 띄울지 — 경로는 하드코딩 대신 config(=.env)에서 읽는다.
+    server_params = StdioServerParameters(
+        command="uv",
+        args=[
+            "--directory", config.CODE_STRUCTURE_MCP_DIR,  # MCP 서버 폴더
+            "run", "code-structure-mcp",                   # pyproject.toml에 등록된 실행 이름
+        ],
+        env={
+            # 서버가 분석할 대상 폴더
+            "CODE_STRUCTURE_BASE_DIR": config.CODE_STRUCTURE_BASE_DIR,
+        },
+    )
+
+    # 서버 띄우고 → 세션 열고 → 악수 → 도구 호출 → 결과 추출 (mcp_probe.py와 동일한 흐름)
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(tool_name, arguments=arguments)
+            # 결과 조각들의 텍스트를 이어붙여 하나의 문자열로.
+            return "\n".join(getattr(b, "text", str(b)) for b in result.content)
+
+
+def find_callers(function_name: str) -> str:
+    """어떤 함수를 '호출하는' 위치를 프로젝트 전체에서 정확히 찾는다.
+
+    search_code(단순 텍스트 검색)와 달리, 코드 구조(tree-sitter)를 분석해
+    def 정의가 아니라 '실제 호출'만 정확히 찾아낸다. "이 함수를 누가 쓰나?"를
+    물을 때 search_code보다 이 도구를 우선 쓸 것.
+
+    Args:
+        function_name: 호출 위치를 찾을 함수 이름 (예: "read_file")
+    """
+    logger.info(f"🔧 find_callers(function_name={function_name!r})")
+
+    # 설정이 안 돼 있으면(경로 없음) 친절히 알려주고 끝. (서버 못 켜는 상황 방어)
+    if not config.CODE_STRUCTURE_MCP_DIR:
+        return "[설정 필요] CODE_STRUCTURE_MCP_DIR가 .env에 없습니다."
+
+    try:
+        # async 로직을 동기 함수 안에서 실행 → 겉모습은 평범한 도구 함수가 된다.
+        return asyncio.run(_call_mcp_tool("find_callers", {"function_name": function_name}))
+    except Exception as e:
+        # MCP 연결/실행이 실패해도 에이전트 전체가 죽지 않게, 문자열로 알려준다.
+        return f"[find_callers 실패] {e}"
+
+def impact_of_change(function_name: str) -> str:
+    """어떤 함수를 고쳤을 때 영향받는 함수들을 단계별로 추적한다.
+
+    find_callers가 '직접 호출하는 곳'만 찾는다면, 이 도구는 그 호출의 연쇄를
+    끝까지 따라간다(A를 고치면 → A를 부르는 B → B를 부르는 C ...). "이 함수를
+    수정하면 어디까지 영향이 가나?"를 물을 때 사용.
+
+    Args:
+        function_name: 영향 범위를 추적할 함수 이름 (변경 대상)
+    """
+    logger.info(f"🔧 impact_of_change(function_name={function_name!r})")
+
+    if not config.CODE_STRUCTURE_MCP_DIR:
+        return "[설정 필요] CODE_STRUCTURE_MCP_DIR가 .env에 없습니다."
+
+    try:
+        return asyncio.run(_call_mcp_tool("impact_of_change", {"function_name": function_name}))
+    except Exception as e:
+        return f"[impact_of_change 실패] {e}"

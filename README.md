@@ -3,6 +3,8 @@
 프로젝트 폴더의 파일을 **직접 읽어 근거로 답하는** AI 에이전트입니다.
 질문을 던지면 에이전트가 스스로 필요한 파일을 찾고(`list_files`), 읽고(`read_file`), 검색해서(`search_code`) 종합해 답합니다. 답을 지어내지 않고, 실제 코드를 확인한 뒤 대답합니다.
 
+여기에 더해, 별도의 **code-structure-mcp** 서버를 붙여 코드 구조(tree-sitter)를 분석하는 심화 도구(`find_callers`, `impact_of_change`)를 사용할 수 있습니다. (로컬 실행 시 동작 — 아래 "코드 구조 분석 기능" 참고)
+
 일반적인 "챗봇"과 달리, LLM이 **어떤 도구를 언제 쓸지 스스로 판단**해 여러 단계를 거쳐 답을 만드는 **에이전트(agent)** 구조가 핵심입니다.
 
 ---
@@ -11,9 +13,10 @@
 
 - **도구 기반 에이전트** — LLM이 상황에 맞는 도구를 스스로 골라 여러 번 호출하며 답을 찾아갑니다.
 - **멀티스텝 추론** — "API 키는 어디서 읽어와?" 같은 질문에 대해 검색 → 파일 읽기 → 종합의 여러 단계를 자동으로 수행합니다.
+- **코드 구조 분석 (MCP 연동)** — `find_callers`("누가 이 함수를 호출하나"), `impact_of_change`("고치면 어디까지 영향이 가나")를 통해 단순 텍스트 검색이 아닌 구조 기반으로 코드를 파악합니다. 외부 MCP 서버(code-structure-mcp)를 클라이언트로 호출하는 방식입니다.
 - **대화 맥락 유지** — 이전 대화를 기억해 "방금 말한 것 중에…" 같은 이어지는 질문에 답합니다.
 - **LLM provider 분기** — 설정값 하나로 Gemini / Claude / OpenAI를 전환할 수 있는 구조입니다. (기본값 Gemini)
-- **안정화 처리** — 도구 호출 횟수 제한(무한루프 방지), 요청 한도 초과(429) 등 에러를 사용자에게 친절하게 안내합니다.
+- **안정화 처리** — 도구 호출 횟수 제한(무한루프 방지), 요청 한도 초과(429), MCP 호출 실패 등 에러를 사용자에게 친절하게 안내합니다.
 - **관측성** — 에이전트가 어떤 도구를 어떤 순서로 호출했는지 로그로 확인할 수 있습니다.
 
 ---
@@ -24,6 +27,7 @@
 |------|-----------|
 | 백엔드 | Python, FastAPI, Uvicorn |
 | 에이전트 / LLM | Google Gemini (기본), Claude · OpenAI 전환 가능 |
+| 코드 구조 분석 | code-structure-mcp (MCP / tree-sitter) — 로컬 연동 |
 | 프론트엔드 | React, TypeScript, Vite |
 | 패키지 관리 | uv (백엔드), npm (프론트엔드) |
 
@@ -37,14 +41,20 @@
                                              │
                                      [에이전트 (provider)]
                                              │
-                         ┌───────────────────┼───────────────────┐
-                    [read_file]         [list_files]         [search_code]
-                     파일 읽기            폴더 목록             단어 검색
-                                             │
-                                          [LLM]  ← 도구를 언제 쓸지 판단
+            ┌──────────────┬──────────────┬──────────────────────────┐
+       [read_file]    [list_files]   [search_code]        [find_callers /
+        파일 읽기       폴더 목록       단어 검색           impact_of_change]
+                                             │             코드 구조 분석 (MCP)
+                                          [LLM]  ← 도구를              │
+                                       언제 쓸지 판단        ┌─────────┴─────────┐
+                                                          [code-structure-mcp 서버]
+                                                           tree-sitter로 호출 관계 분석
+                                                           (로컬에서 클라이언트로 호출)
 ```
 
 프론트엔드는 백엔드의 `/chat` API만 호출합니다. 백엔드는 LLM에게 도구 목록을 알려주고, LLM이 도구 호출을 요청하면 실제 함수를 실행해 결과를 다시 LLM에게 전달하는 **도구 호출 루프**를 돌립니다.
+
+`read_file` · `list_files` · `search_code`는 백엔드 안의 파이썬 함수로 바로 실행됩니다. `find_callers` · `impact_of_change`는 백엔드가 **code-structure-mcp 서버를 MCP 클라이언트로 호출**해, 구조 분석 결과를 받아오는 방식입니다.
 
 ---
 
@@ -57,10 +67,11 @@ code-agent/
 │   │   ├── server.py         # FastAPI 서버, /chat 엔드포인트
 │   │   ├── llm.py            # server와 provider 사이 연결
 │   │   ├── providers.py      # Gemini/Claude/OpenAI 구현 + 도구 루프
-│   │   ├── tools.py          # 도구 함수(read_file, list_files, search_code)
-│   │   └── config.py         # 설정(.env에서 키·모델·provider 로드)
+│   │   ├── tools.py          # 도구 함수(read_file, list_files, search_code,
+│   │   │                     #          find_callers, impact_of_change)
+│   │   └── config.py         # 설정(.env에서 키·모델·provider·MCP 경로 로드)
 │   ├── pyproject.toml
-│   └── .env                  # API 키 등 (git에 올리지 않음)
+│   └── .env                  # API 키, MCP 경로 등 (git에 올리지 않음)
 │
 └── frontend/                 # React 채팅 UI
     ├── src/
@@ -80,6 +91,7 @@ code-agent/
 - Python 3.10 이상, [uv](https://docs.astral.sh/uv/) 설치
 - Node.js (npm 포함) 설치
 - Gemini API 키 ([Google AI Studio](https://aistudio.google.com)에서 무료 발급)
+- (선택) 코드 구조 분석 기능을 쓰려면 [code-structure-mcp](https://github.com/soskjh5382/code-structure-mcp) 레포를 로컬에 받아둡니다.
 
 ### 1. 저장소 받기
 
@@ -96,10 +108,11 @@ cd backend
 # 의존성 설치
 uv sync
 
-# .env 파일을 만들고 아래 내용을 채운다
+# .env 파일을 만들고 아래 내용을 채운다 (아래 "환경 변수" 표 참고)
 #   GEMINI_API_KEY=발급받은_키
-#   (선택) GEMINI_MODEL=gemini-3.5-flash-lite
 #   (선택) LLM_PROVIDER=gemini
+#   (선택) CODE_STRUCTURE_MCP_DIR=code-structure-mcp 레포 경로
+#   (선택) CODE_STRUCTURE_BASE_DIR=분석 대상 폴더
 
 # 서버 실행
 uv run uvicorn code_agent.server:app --reload --app-dir src
@@ -107,6 +120,9 @@ uv run uvicorn code_agent.server:app --reload --app-dir src
 
 서버가 `http://127.0.0.1:8000` 에서 실행됩니다.
 API 문서는 `http://127.0.0.1:8000/docs` 에서 확인할 수 있습니다.
+
+> **참고:** 환경에 따라 `uv run uvicorn ...` 실행 시 `uv trampoline failed to canonicalize script path` 오류가 날 수 있습니다.
+> 이때는 `uv run python -m uvicorn code_agent.server:app --reload --app-dir src` 로 실행하면 우회됩니다.
 
 ### 3. 프론트엔드 실행 (터미널 2)
 
@@ -136,8 +152,26 @@ npm run dev
 | `LLM_PROVIDER` | 사용할 LLM (`gemini` / `claude` / `openai`) | `gemini` |
 | `ANTHROPIC_API_KEY` | Claude 사용 시 필요 | — |
 | `OPENAI_API_KEY` | OpenAI 사용 시 필요 | — |
+| `CODE_STRUCTURE_MCP_DIR` | code-structure-mcp 서버 폴더 경로 (구조 분석 기능용) | — |
+| `CODE_STRUCTURE_BASE_DIR` | 구조 분석 시 대상 폴더 | `.` |
 
 `LLM_PROVIDER` 값만 바꾸면 다른 LLM으로 전환됩니다. (해당 provider의 API 키가 있어야 함)
+
+`CODE_STRUCTURE_MCP_DIR`이 비어 있으면 구조 분석 도구(`find_callers`, `impact_of_change`)는 "설정 필요" 안내를 반환하고, 나머지 기능은 정상 동작합니다.
+
+---
+
+## 코드 구조 분석 기능 (로컬 전용)
+
+`find_callers`, `impact_of_change`는 별도의 **code-structure-mcp** 서버를 통해 코드 구조(tree-sitter)를 분석합니다.
+
+- **`find_callers(function_name)`** — 어떤 함수를 *호출하는* 위치를 프로젝트 전체에서 찾습니다. 단순 텍스트 검색(`search_code`)과 달리 def 정의가 아닌 실제 호출만 정확히 잡습니다.
+- **`impact_of_change(function_name)`** — 어떤 함수를 고쳤을 때 영향받는 함수들을 호출 연쇄를 따라 단계별로 추적합니다.
+
+**동작 방식:** 백엔드가 필요 시 `CODE_STRUCTURE_MCP_DIR` 경로의 MCP 서버를 stdio로 실행해(MCP 클라이언트) 도구를 호출하고, 결과를 받아 LLM에게 전달합니다.
+
+> **이 기능은 로컬 실행 시 동작합니다.** 배포 환경(예: Render)에서는 외부 프로세스(MCP 서버)를 띄우는 제약으로 현재 미지원이며, 기존 도구(`read_file`, `list_files`, `search_code`)는 배포 환경에서도 정상 동작합니다.
+> 향후 code-structure-mcp를 원격 MCP 서버(HTTP)로 분리 배포하면 배포 환경에서도 사용할 수 있습니다.
 
 ---
 
@@ -149,6 +183,11 @@ npm run dev
 - "이 프로젝트가 무슨 프로젝트인지 설명해줘"
 - "API 키는 어디서 읽어와?"
 - "server.py가 하는 일을 설명해줘"
+
+코드 구조 분석 기능(로컬)을 켜두면 다음과 같은 질문도 정확히 답합니다.
+
+- "list_files 함수를 호출하는 곳이 어디야?" → `find_callers`
+- "read_file 함수를 고치면 어디까지 영향이 가?" → `impact_of_change`
 
 ---
 

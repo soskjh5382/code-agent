@@ -36,3 +36,11 @@ CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
 # 마찬가지로 나중에 .env에 OPENAI_API_KEY를 넣으면 작동.
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
+
+# --- code-structure-mcp 서버 설정 ---
+# 붙일 MCP 서버(code-structure-mcp)가 있는 폴더. 컴퓨터마다 경로가 달라서 .env로 뺀다.
+# (하드코딩하면 GitHub에 올렸을 때 다른 사람 PC에서 경로가 안 맞아 깨진다)
+CODE_STRUCTURE_MCP_DIR = os.environ.get("CODE_STRUCTURE_MCP_DIR")
+
+# 그 서버가 "분석할 대상 폴더". 없으면 현재 폴더(".")를 기본값으로.
+CODE_STRUCTURE_BASE_DIR = os.environ.get("CODE_STRUCTURE_BASE_DIR", ".")

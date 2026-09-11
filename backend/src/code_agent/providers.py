@@ -38,6 +38,12 @@ SYSTEM_INSTRUCTION = (
     "파일 이름을 모를 때는 list_files로 폴더를 둘러보고, "
     "특정 단어가 어디 있는지 찾을 때는 search_code를 쓰고, "
     "파일 내용을 확인할 때는 read_file을 써라. "
+    "특정 함수를 '누가 호출하는지' 찾을 때는 search_code 대신 find_callers를 써라. "
+    "이 도구는 코드 구조를 분석해 실제 호출만 정확히 찾는다. "
+    "추측하지 말고 도구로 실제 확인한 뒤 답해라."
+    "특정 함수를 '누가 호출하는지' 찾을 때는 search_code 대신 find_callers를 써라. "
+    "이 도구는 코드 구조를 분석해 실제 호출만 정확히 찾는다. "
+    "어떤 함수를 '고치면 어디까지 영향이 가는지' 물으면 impact_of_change를 써라. "
     "추측하지 말고 도구로 실제 확인한 뒤 답해라."
 )
 
@@ -54,7 +60,7 @@ class GeminiProvider(LLMProvider):
         from google.genai import types, errors
 
         # Gemini가 쓸 수 있는 도구들.
-        available_tools = [tools.read_file, tools.list_files, tools.search_code]
+        available_tools = [tools.read_file, tools.list_files, tools.search_code, tools.find_callers, tools.impact_of_change]
 
         chat = self._client.chats.create(
             model=config.GEMINI_MODEL,
@@ -133,12 +139,34 @@ class ClaudeProvider(LLMProvider):
                     "required": ["keyword"],
                 },
             },
+            {
+                "name": "find_callers",
+                "description": "어떤 함수를 '호출하는' 위치를 코드 구조 분석으로 정확히 찾는다. "
+                               "'누가 이 함수를 쓰나'를 물을 때 search_code보다 우선 사용.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"function_name": {"type": "string", "description": "호출 위치를 찾을 함수 이름"}},
+                    "required": ["function_name"],
+                },
+            },
+            {
+                "name": "impact_of_change",
+                "description": "어떤 함수를 고쳤을 때 영향받는 함수들을 호출 연쇄를 따라 단계별로 추적한다. "
+                               "'이 함수를 수정하면 어디까지 영향이 가나'를 물을 때 사용.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"function_name": {"type": "string", "description": "영향 범위를 추적할 함수 이름"}},
+                    "required": ["function_name"],
+                },
+            },
         ]
         # 도구 이름 → 실제 파이썬 함수 연결표.
         self._tool_funcs = {
             "read_file": tools.read_file,
             "list_files": tools.list_files,
             "search_code": tools.search_code,
+            "find_callers": tools.find_callers,
+            "impact_of_change": tools.impact_of_change,
         }
 
     def ask(self, message: str, history=None) -> str:
@@ -239,11 +267,39 @@ class OpenAIProvider(LLMProvider):
                     },
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "find_callers",
+                    "description": "어떤 함수를 '호출하는' 위치를 코드 구조 분석으로 정확히 찾는다. "
+                                   "'누가 이 함수를 쓰나'를 물을 때 search_code보다 우선 사용.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"function_name": {"type": "string"}},
+                        "required": ["function_name"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "impact_of_change",
+                    "description": "어떤 함수를 고쳤을 때 영향받는 함수들을 호출 연쇄를 따라 단계별로 추적한다. "
+                                   "'이 함수를 수정하면 어디까지 영향이 가나'를 물을 때 사용.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"function_name": {"type": "string"}},
+                        "required": ["function_name"],
+                    },
+                },
+            },
         ]
         self._tool_funcs = {
             "read_file": tools.read_file,
             "list_files": tools.list_files,
             "search_code": tools.search_code,
+            "find_callers": tools.find_callers,
+            "impact_of_change": tools.impact_of_change,
         }
 
     def ask(self, message: str, history=None) -> str:
